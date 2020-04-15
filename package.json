@@ -12,8 +12,6 @@
   "dependencies": {
     "@types/lodash": "^4.14.149",
     "@types/uuid": "^7.0.2",
-    "canvas": "^2.6.1",
-    "chart.js": "^2.9.3",
     "lodash": "^4.17.15",
     "mysql": "^2.14.1",
     "reflect-metadata": "^0.1.10",
