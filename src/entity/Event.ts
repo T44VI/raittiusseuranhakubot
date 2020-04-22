@@ -24,6 +24,9 @@ export class Event {
   @Column()
   endTime: Date;
 
+  @Column({ nullable: true })
+  messageId: number;
+
   constructor(
     id: string,
     name: string,

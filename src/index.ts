@@ -3,11 +3,12 @@ import { createConnection, getRepository, getConnection } from "typeorm";
 
 const connection = createConnection();
 
-const MAX_HOURS = 12;
-const MIN_MINUTES = 10;
-
 import { readFileSync } from "fs";
 import _ from "lodash";
+
+const MAX_HOURS = 12;
+const MIN_MINUTES = 10;
+const HUUTELU_CHAT_ID = Number(readFileSync("chatId.txt", "utf8").trim());
 
 import Telegraf, { ContextMessageUpdate, Markup } from "telegraf";
 import TelegrafInlineMenu from "telegraf-inline-menu";
@@ -192,12 +193,20 @@ let LastTime = 0;
 const cleanTables = async (): Promise<any> => {
   if (Date.now() - 60000 > LastTime) {
     LastTime = Date.now();
-    return getConnection()
+    const eves = await getConnection()
       .createQueryBuilder()
-      .delete()
-      .from(Event)
+      .select("event")
+      .from(Event, "event")
       .where("endTime < :time", { time: new Date(Date.now()) })
-      .execute();
+      .getMany();
+    return Promise.all(
+      eves.map((eve) => {
+        events.removeById(eve.id);
+        if (eve.messageId) {
+          huuteluBot.telegram.deleteMessage(HUUTELU_CHAT_ID, eve.messageId);
+        }
+      })
+    );
   }
   return Promise.resolve();
 };
@@ -268,10 +277,20 @@ const events = {
       .from(Event)
       .where("id = :id", { id })
       .execute(),
+  setMessageId: (eventId: string, msgId: number) => {
+    getConnection()
+      .createQueryBuilder()
+      .update(Event)
+      .set({ messageId: msgId })
+      .where("id = :id", { id: eventId })
+      .execute();
+  },
 };
 
-const token = readFileSync("token.txt", "utf8").trim();
+const token = readFileSync("token_Urheilumetri.txt", "utf8").trim();
 const bot = new Telegraf(token);
+const huuteluToken = readFileSync("token_huutelubot.txt", "utf8").trim();
+const huuteluBot = new Telegraf(huuteluToken);
 
 const categoryHeader = (ctx: sessionContextMessageUpdate) => ctx.match![1];
 
@@ -297,7 +316,9 @@ const eventHeader = async (
   }`;
 };
 
-const menu = new TelegrafInlineMenu("Päävalikko");
+const menu = new TelegrafInlineMenu(
+  "*Päävalikko*\n\nSaadaksesi välittömän tiedon uusista aktiviteeteista, liity kanavalle @Raittiusseuranhuutelua"
+);
 
 const allEvents = {
   menu: new TelegrafInlineMenu("Aktiviteettikategoriat"),
@@ -375,6 +396,9 @@ allEvents.eventSubmenu
           event.host,
           "Järjestelmänvalvoja on poisti aktiviteettisi"
         );
+        if (event.messageId) {
+          huuteluBot.telegram.deleteMessage(HUUTELU_CHAT_ID, event.messageId);
+        }
       } catch (e) {
         ctx.answerCbQuery(e);
       }
@@ -614,11 +638,20 @@ ownEvents.addSubmenu
   .simpleButton("Tallenna 💾", "sav", {
     doFunc: async (ctx) => {
       try {
-        const event = eventPlan.get(ctx);
-        await events.add(ctx, event);
+        const eventP = eventPlan.get(ctx);
+        const event = await events.add(ctx, eventP);
         const latestEdit = `✅ Tapahtuma ${event.name} luotu!`;
         eventPlan.set(ctx, { ...initialEventPlan, latestEdit });
         ctx.answerCbQuery("Tapahtuma tallennettu");
+        const msgInfo = await huuteluBot.telegram.sendMessage(
+          HUUTELU_CHAT_ID,
+          `Uusi tapahtuma kategoriaan ${event.category}:\n${
+            event.name
+          }\n\nPäättyy noin: ${event.endTime.getHours()}:${
+            event.endTime.getMinutes() < 10 ? "0" : ""
+          }${event.endTime.getMinutes()}\n @${bot.options.username}`
+        );
+        events.setMessageId(event.id, msgInfo.message_id);
       } catch (e) {
         const latestEdit = "‼️ " + e;
         const oldEventPlan = eventPlan.get(ctx);
@@ -641,8 +674,12 @@ ownEvents.ownEventMenu.simpleButton("Lopeta ❌", "end", {
   doFunc: async (ctx) => {
     const id = ctx.match![1];
     try {
-      events.removeById(id);
+      const event = await events.getById(id);
+      await events.removeById(id);
       ctx.answerCbQuery("Aktiviteetti lopetettu");
+      if (event.messageId) {
+        huuteluBot.telegram.deleteMessage(HUUTELU_CHAT_ID, event.messageId);
+      }
     } catch (e) {
       ctx.answerCbQuery("Jotain meni vikaan");
     }
@@ -650,6 +687,7 @@ ownEvents.ownEventMenu.simpleButton("Lopeta ❌", "end", {
   setMenuAfter: true,
   hide: (ctx) => !events.getById(ctx.match![1]),
 });
+
 menu.submenu(
   "Käyttöohjeita ℹ️",
   "photo",
@@ -679,9 +717,20 @@ bot.catch((error: any) => {
   );
 });
 
+huuteluBot.catch((error: any) => {
+  console.log(
+    "telegraf error",
+    error.response,
+    error.parameters,
+    error.on || error
+  );
+});
+
 async function startup(): Promise<void> {
   await bot.launch();
   console.log(new Date(), "Bot started as", bot.options.username);
+  await huuteluBot.launch();
+  console.log(new Date(), "HuuteluBot started as", huuteluBot.options.username);
 }
 
 startup();
