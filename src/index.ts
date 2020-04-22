@@ -287,7 +287,7 @@ const events = {
   },
 };
 
-const token = readFileSync("token_Urheilumetri.txt", "utf8").trim();
+const token = readFileSync("token.txt", "utf8").trim();
 const bot = new Telegraf(token);
 const huuteluToken = readFileSync("token_huutelubot.txt", "utf8").trim();
 const huuteluBot = new Telegraf(huuteluToken);
