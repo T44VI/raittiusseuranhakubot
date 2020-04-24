@@ -41,9 +41,9 @@ class SessionVariable<T> {
   }
 }
 
-export type Category = "Sportti" | "Pelit" | "Muut";
+export type Category = "Sportti" | "Pelit" | "After Work" | "Muut";
 
-const categories: Category[] = ["Sportti", "Pelit", "Muut"];
+const categories: Category[] = ["Sportti", "Pelit", "After Work", "Muut"];
 
 type EventPlan = {
   name: string;
@@ -334,6 +334,7 @@ allEvents.menu.selectSubmenu("c", categories, allEvents.catalogSubmenu, {
     }
     return `${key} (${eventL})`;
   },
+  columns: 2,
 });
 
 allEvents.catalogSubmenu.selectSubmenu(
@@ -607,6 +608,7 @@ ownEvents.addSubmenu
     },
     isSetFunc: (ctx, key) => eventPlan.get(ctx).category === key,
     hide: (_ctx) => !eventPlan.get(_ctx).desc,
+    columns: 2,
   })
   .question(
     (ctx: sessionContextMessageUpdate): string => {
